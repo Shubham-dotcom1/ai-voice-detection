@@ -4,27 +4,40 @@ from .feature_extractor import AudioFeatureExtractor
 
 class VoiceDetector:
     """
-    AI vs Human Voice Detection Engine
+    Advanced AI vs Human Voice Detection Engine
+    Improved accuracy with better thresholds and multi-feature analysis
     """
     
+    # Fine-tuned thresholds for better accuracy
     THRESHOLDS = {
-        'pitch_cv_ai_max': 0.08,
-        'pitch_cv_human_min': 0.12,
-        'pitch_std_ai_max': 15,
-        'mfcc_variance_ai_max': 80,
-        'mfcc_delta_std_ai_max': 10,
-        'spectral_flatness_ai_min': 0.05,
-        'spectral_centroid_std_ai_max': 200,
-        'silence_ratio_ai_max': 0.03,
-        'silence_ratio_ai_min': 0.35,
-        'jitter_ai_max': 0.02,
-        'harmonic_ratio_ai_min': 50,
+        # Pitch features (AI has very consistent pitch)
+        'pitch_cv_ai_max': 0.15,
+        'pitch_cv_human_min': 0.08,
+        'pitch_std_ai_max': 25,
+        
+        # MFCC features (AI has more uniform patterns)
+        'mfcc_variance_ai_max': 150,
+        'mfcc_delta_std_ai_max': 15,
+        
+        # Spectral features
+        'spectral_flatness_ai_min': 0.03,
+        'spectral_centroid_std_ai_max': 350,
+        
+        # Temporal features (AI lacks natural pauses)
+        'silence_ratio_human_min': 0.05,
+        'silence_ratio_human_max': 0.30,
+        
+        # Voice quality (AI lacks micro-variations)
+        'jitter_ai_max': 0.05,
+        'shimmer_ai_max': 0.3,
+        'harmonic_ratio_ai_min': 40,
     }
     
+    # Weights for each feature category
     WEIGHTS = {
-        'pitch': 0.25,
+        'pitch': 0.30,
         'mfcc': 0.20,
-        'spectral': 0.20,
+        'spectral': 0.15,
         'temporal': 0.15,
         'voice_quality': 0.20
     }
@@ -36,130 +49,259 @@ class VoiceDetector:
         self.features: Dict[str, float] = {}
         self.scores: Dict[str, float] = {}
         self.indicators: List[str] = []
+        self.ai_signals = 0
+        self.human_signals = 0
     
     def detect(self) -> Dict:
-        """Main detection method"""
+        """Main detection method with improved accuracy"""
+        
+        # Extract features
         extractor = AudioFeatureExtractor(self.y, self.sr)
         self.features = extractor.extract_all_features()
         
+        # Analyze each feature category
         self._analyze_pitch()
         self._analyze_mfcc()
         self._analyze_spectral()
         self._analyze_temporal()
         self._analyze_voice_quality()
         
+        # Calculate final probability
         ai_probability = self._calculate_final_score()
         
-        if ai_probability >= 0.55:
+        # Boost confidence based on signal count
+        confidence_boost = self._calculate_confidence_boost()
+        
+        # Determine classification
+        if ai_probability >= 0.50:
             classification = "AI_GENERATED"
-            confidence = ai_probability
+            raw_confidence = ai_probability
         else:
             classification = "HUMAN"
-            confidence = 1.0 - ai_probability
+            raw_confidence = 1.0 - ai_probability
         
-        confidence = max(0.51, min(0.99, confidence))
+        # Apply confidence boost
+        final_confidence = min(0.99, raw_confidence + confidence_boost)
+        final_confidence = max(0.55, final_confidence)
+        
+        # Generate explanation
         explanation = self._generate_explanation(classification)
         
         return {
             "classification": classification,
-            "confidenceScore": round(confidence, 2),
+            "confidenceScore": round(final_confidence, 2),
             "explanation": explanation
         }
     
     def _analyze_pitch(self):
-        """Analyze pitch features"""
-        score = 0.5
+        """Analyze pitch features - key indicator for AI detection"""
         pitch_cv = self.features.get('pitch_cv', 0)
         pitch_std = self.features.get('pitch_std', 0)
+        pitch_range = self.features.get('pitch_range', 0)
         
-        if pitch_cv < self.THRESHOLDS['pitch_cv_ai_max']:
-            score = 0.85
+        ai_score = 0.0
+        human_score = 0.0
+        
+        # Check pitch coefficient of variation
+        if pitch_cv < self.THRESHOLDS['pitch_cv_human_min']:
+            ai_score += 0.4
+            self.ai_signals += 1
             self.indicators.append("Unnaturally consistent pitch detected")
-        elif pitch_cv < self.THRESHOLDS['pitch_cv_human_min']:
-            score = 0.65
-            self.indicators.append("Limited pitch variation observed")
-        else:
-            score = 0.25
+        elif pitch_cv > self.THRESHOLDS['pitch_cv_ai_max']:
+            human_score += 0.4
+            self.human_signals += 1
             self.indicators.append("Natural pitch variation present")
+        else:
+            human_score += 0.2
         
+        # Check pitch standard deviation
         if pitch_std < self.THRESHOLDS['pitch_std_ai_max'] and pitch_std > 0:
-            score = min(score + 0.1, 0.95)
+            ai_score += 0.3
+            self.ai_signals += 1
+        else:
+            human_score += 0.3
+            self.human_signals += 1
         
-        self.scores['pitch'] = score
+        # Check pitch range
+        if pitch_range > 50:
+            human_score += 0.3
+            self.human_signals += 1
+            self.indicators.append("Wide pitch range typical of human speech")
+        else:
+            ai_score += 0.2
+        
+        total = ai_score + human_score
+        if total > 0:
+            self.scores['pitch'] = ai_score / total
+        else:
+            self.scores['pitch'] = 0.5
     
     def _analyze_mfcc(self):
         """Analyze MFCC features"""
-        score = 0.5
         mfcc_var = self.features.get('mfcc_variance', 0)
         mfcc_delta_std = self.features.get('mfcc_delta_std', 0)
+        mfcc_std_mean = self.features.get('mfcc_std_mean', 0)
         
+        ai_score = 0.0
+        human_score = 0.0
+        
+        # Check MFCC variance
         if mfcc_var < self.THRESHOLDS['mfcc_variance_ai_max']:
-            score = 0.75
+            ai_score += 0.4
+            self.ai_signals += 1
             self.indicators.append("Low spectral complexity detected")
         else:
-            score = 0.35
+            human_score += 0.4
+            self.human_signals += 1
+            self.indicators.append("Rich spectral complexity present")
         
+        # Check MFCC delta
         if mfcc_delta_std < self.THRESHOLDS['mfcc_delta_std_ai_max']:
-            score = min(score + 0.15, 0.9)
+            ai_score += 0.3
+            self.ai_signals += 1
             self.indicators.append("Limited dynamic speech patterns")
+        else:
+            human_score += 0.3
+            self.human_signals += 1
         
-        self.scores['mfcc'] = score
+        # Check MFCC std mean
+        if mfcc_std_mean > 10:
+            human_score += 0.3
+            self.human_signals += 1
+        else:
+            ai_score += 0.2
+        
+        total = ai_score + human_score
+        if total > 0:
+            self.scores['mfcc'] = ai_score / total
+        else:
+            self.scores['mfcc'] = 0.5
     
     def _analyze_spectral(self):
         """Analyze spectral features"""
-        score = 0.5
         flatness = self.features.get('spectral_flatness_mean', 0)
         centroid_std = self.features.get('spectral_centroid_std', 0)
+        contrast = self.features.get('spectral_contrast_mean', 0)
         
-        if flatness > self.THRESHOLDS['spectral_flatness_ai_min']:
-            score = 0.7
-            self.indicators.append("Unusual spectral characteristics")
+        ai_score = 0.0
+        human_score = 0.0
+        
+        # Check spectral flatness
+        if flatness < self.THRESHOLDS['spectral_flatness_ai_min']:
+            human_score += 0.35
+            self.human_signals += 1
+            self.indicators.append("Natural tonal quality detected")
         else:
-            score = 0.4
+            ai_score += 0.25
         
-        if centroid_std < self.THRESHOLDS['spectral_centroid_std_ai_max']:
-            score = min(score + 0.1, 0.85)
+        # Check spectral centroid variation
+        if centroid_std > self.THRESHOLDS['spectral_centroid_std_ai_max']:
+            human_score += 0.35
+            self.human_signals += 1
+            self.indicators.append("Natural frequency variations present")
+        else:
+            ai_score += 0.3
+            self.ai_signals += 1
         
-        self.scores['spectral'] = score
+        # Check spectral contrast
+        if contrast > 20:
+            human_score += 0.3
+            self.human_signals += 1
+        else:
+            ai_score += 0.2
+        
+        total = ai_score + human_score
+        if total > 0:
+            self.scores['spectral'] = ai_score / total
+        else:
+            self.scores['spectral'] = 0.5
     
     def _analyze_temporal(self):
         """Analyze temporal features"""
-        score = 0.5
         silence_ratio = self.features.get('silence_ratio', 0)
+        rms_cv = self.features.get('rms_cv', 0)
+        zcr_std = self.features.get('zcr_std', 0)
         
-        if silence_ratio < self.THRESHOLDS['silence_ratio_ai_max']:
-            score = 0.8
+        ai_score = 0.0
+        human_score = 0.0
+        
+        # Check silence ratio (humans have natural pauses)
+        if self.THRESHOLDS['silence_ratio_human_min'] <= silence_ratio <= self.THRESHOLDS['silence_ratio_human_max']:
+            human_score += 0.5
+            self.human_signals += 1
+            self.indicators.append("Natural breathing pauses detected")
+        elif silence_ratio < self.THRESHOLDS['silence_ratio_human_min']:
+            ai_score += 0.4
+            self.ai_signals += 1
             self.indicators.append("Lack of natural breathing pauses")
-        elif silence_ratio > self.THRESHOLDS['silence_ratio_ai_min']:
-            score = 0.65
-            self.indicators.append("Unusual pause patterns detected")
         else:
-            score = 0.3
-            self.indicators.append("Natural speech rhythm detected")
+            ai_score += 0.3
+            self.indicators.append("Unusual pause patterns detected")
         
-        self.scores['temporal'] = score
+        # Check RMS coefficient of variation
+        if rms_cv > 0.4:
+            human_score += 0.3
+            self.human_signals += 1
+            self.indicators.append("Natural energy variations in speech")
+        else:
+            ai_score += 0.25
+        
+        # Check zero crossing rate variation
+        if zcr_std > 0.02:
+            human_score += 0.2
+        else:
+            ai_score += 0.15
+        
+        total = ai_score + human_score
+        if total > 0:
+            self.scores['temporal'] = ai_score / total
+        else:
+            self.scores['temporal'] = 0.5
     
     def _analyze_voice_quality(self):
-        """Analyze voice quality"""
-        score = 0.5
+        """Analyze voice quality features"""
         jitter = self.features.get('jitter', 0)
+        shimmer = self.features.get('shimmer', 0)
         harmonic_ratio = self.features.get('harmonic_ratio', 0)
         
-        if jitter < self.THRESHOLDS['jitter_ai_max']:
-            score = 0.8
-            self.indicators.append("Missing natural voice micro-variations")
+        ai_score = 0.0
+        human_score = 0.0
+        
+        # Check jitter (humans have natural micro-variations)
+        if jitter > self.THRESHOLDS['jitter_ai_max']:
+            human_score += 0.4
+            self.human_signals += 1
+            self.indicators.append("Natural voice micro-variations detected")
         else:
-            score = 0.3
-            self.indicators.append("Natural voice tremor patterns present")
+            ai_score += 0.4
+            self.ai_signals += 1
+            self.indicators.append("Missing natural voice micro-variations")
         
+        # Check shimmer
+        if shimmer > self.THRESHOLDS['shimmer_ai_max']:
+            human_score += 0.3
+            self.human_signals += 1
+            self.indicators.append("Natural amplitude variations present")
+        else:
+            ai_score += 0.3
+            self.ai_signals += 1
+        
+        # Check harmonic ratio (AI often too clean)
         if harmonic_ratio > self.THRESHOLDS['harmonic_ratio_ai_min']:
-            score = min(score + 0.1, 0.9)
+            ai_score += 0.25
             self.indicators.append("Unusually clean audio signal")
+        else:
+            human_score += 0.25
+            self.human_signals += 1
         
-        self.scores['voice_quality'] = score
+        total = ai_score + human_score
+        if total > 0:
+            self.scores['voice_quality'] = ai_score / total
+        else:
+            self.scores['voice_quality'] = 0.5
     
     def _calculate_final_score(self) -> float:
-        """Calculate weighted final score"""
+        """Calculate weighted final AI probability score"""
         total_score = 0.0
         total_weight = 0.0
         
@@ -172,8 +314,32 @@ class VoiceDetector:
             return total_score / total_weight
         return 0.5
     
+    def _calculate_confidence_boost(self) -> float:
+        """Calculate confidence boost based on signal agreement"""
+        total_signals = self.ai_signals + self.human_signals
+        
+        if total_signals == 0:
+            return 0.0
+        
+        # If most signals agree, boost confidence
+        if self.ai_signals > self.human_signals:
+            agreement_ratio = self.ai_signals / total_signals
+        else:
+            agreement_ratio = self.human_signals / total_signals
+        
+        # Boost ranges from 0 to 0.25 based on agreement
+        if agreement_ratio > 0.75:
+            return 0.25
+        elif agreement_ratio > 0.65:
+            return 0.15
+        elif agreement_ratio > 0.55:
+            return 0.08
+        else:
+            return 0.0
+    
     def _generate_explanation(self, classification: str) -> str:
-        """Generate explanation"""
+        """Generate detailed explanation"""
+        
         if classification == "AI_GENERATED":
             ai_indicators = [
                 ind for ind in self.indicators 
@@ -183,10 +349,10 @@ class VoiceDetector:
                 ])
             ]
             
-            if ai_indicators:
+            if len(ai_indicators) >= 2:
+                return f"{ai_indicators[0]} and {ai_indicators[1].lower()}"
+            elif ai_indicators:
                 return ai_indicators[0]
-            
-            max_score_category = max(self.scores, key=self.scores.get)
             
             explanations = {
                 'pitch': "Unnatural pitch consistency and robotic speech patterns detected",
@@ -196,21 +362,21 @@ class VoiceDetector:
                 'voice_quality': "Missing natural voice micro-variations and tremors"
             }
             
-            return explanations.get(max_score_category, 
-                "Synthetic speech patterns detected in audio analysis")
+            max_category = max(self.scores, key=self.scores.get)
+            return explanations.get(max_category, "Synthetic speech patterns detected")
         
-        else:
+        else:  # HUMAN
             human_indicators = [
                 ind for ind in self.indicators 
                 if any(word in ind.lower() for word in [
-                    'natural', 'present', 'human', 'normal'
+                    'natural', 'present', 'human', 'rich', 'wide', 'breathing'
                 ])
             ]
             
-            if human_indicators:
+            if len(human_indicators) >= 2:
+                return f"{human_indicators[0]} and {human_indicators[1].lower()}"
+            elif human_indicators:
                 return human_indicators[0]
-            
-            min_score_category = min(self.scores, key=self.scores.get)
             
             explanations = {
                 'pitch': "Natural pitch variation consistent with human speech",
@@ -220,5 +386,5 @@ class VoiceDetector:
                 'voice_quality': "Natural voice micro-variations and breathing detected"
             }
             
-            return explanations.get(min_score_category,
-                "Natural human speech characteristics identified")
+            min_category = min(self.scores, key=self.scores.get)
+            return explanations.get(min_category, "Natural human speech characteristics identified")
