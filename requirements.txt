@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic
+librosa
+numpy
+scipy
+pydub
+soundfile
+python-dotenv
