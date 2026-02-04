@@ -10,30 +10,20 @@ class VoiceDetector:
     
     # Fine-tuned thresholds for better accuracy
     THRESHOLDS = {
-        # Pitch features (AI has very consistent pitch)
         'pitch_cv_ai_max': 0.15,
         'pitch_cv_human_min': 0.08,
         'pitch_std_ai_max': 25,
-        
-        # MFCC features (AI has more uniform patterns)
         'mfcc_variance_ai_max': 150,
         'mfcc_delta_std_ai_max': 15,
-        
-        # Spectral features
         'spectral_flatness_ai_min': 0.03,
         'spectral_centroid_std_ai_max': 350,
-        
-        # Temporal features (AI lacks natural pauses)
         'silence_ratio_human_min': 0.05,
         'silence_ratio_human_max': 0.30,
-        
-        # Voice quality (AI lacks micro-variations)
         'jitter_ai_max': 0.05,
         'shimmer_ai_max': 0.3,
         'harmonic_ratio_ai_min': 40,
     }
     
-    # Weights for each feature category
     WEIGHTS = {
         'pitch': 0.30,
         'mfcc': 0.20,
@@ -55,24 +45,18 @@ class VoiceDetector:
     def detect(self) -> Dict:
         """Main detection method with improved accuracy"""
         
-        # Extract features
         extractor = AudioFeatureExtractor(self.y, self.sr)
         self.features = extractor.extract_all_features()
         
-        # Analyze each feature category
         self._analyze_pitch()
         self._analyze_mfcc()
         self._analyze_spectral()
         self._analyze_temporal()
         self._analyze_voice_quality()
         
-        # Calculate final probability
         ai_probability = self._calculate_final_score()
-        
-        # Boost confidence based on signal count
         confidence_boost = self._calculate_confidence_boost()
         
-        # Determine classification
         if ai_probability >= 0.50:
             classification = "AI_GENERATED"
             raw_confidence = ai_probability
@@ -80,11 +64,9 @@ class VoiceDetector:
             classification = "HUMAN"
             raw_confidence = 1.0 - ai_probability
         
-        # Apply confidence boost
         final_confidence = min(0.99, raw_confidence + confidence_boost)
         final_confidence = max(0.55, final_confidence)
         
-        # Generate explanation
         explanation = self._generate_explanation(classification)
         
         return {
@@ -94,7 +76,7 @@ class VoiceDetector:
         }
     
     def _analyze_pitch(self):
-        """Analyze pitch features - key indicator for AI detection"""
+        """Analyze pitch features"""
         pitch_cv = self.features.get('pitch_cv', 0)
         pitch_std = self.features.get('pitch_std', 0)
         pitch_range = self.features.get('pitch_range', 0)
@@ -102,7 +84,6 @@ class VoiceDetector:
         ai_score = 0.0
         human_score = 0.0
         
-        # Check pitch coefficient of variation
         if pitch_cv < self.THRESHOLDS['pitch_cv_human_min']:
             ai_score += 0.4
             self.ai_signals += 1
@@ -114,7 +95,6 @@ class VoiceDetector:
         else:
             human_score += 0.2
         
-        # Check pitch standard deviation
         if pitch_std < self.THRESHOLDS['pitch_std_ai_max'] and pitch_std > 0:
             ai_score += 0.3
             self.ai_signals += 1
@@ -122,7 +102,6 @@ class VoiceDetector:
             human_score += 0.3
             self.human_signals += 1
         
-        # Check pitch range
         if pitch_range > 50:
             human_score += 0.3
             self.human_signals += 1
@@ -145,7 +124,6 @@ class VoiceDetector:
         ai_score = 0.0
         human_score = 0.0
         
-        # Check MFCC variance
         if mfcc_var < self.THRESHOLDS['mfcc_variance_ai_max']:
             ai_score += 0.4
             self.ai_signals += 1
@@ -155,7 +133,6 @@ class VoiceDetector:
             self.human_signals += 1
             self.indicators.append("Rich spectral complexity present")
         
-        # Check MFCC delta
         if mfcc_delta_std < self.THRESHOLDS['mfcc_delta_std_ai_max']:
             ai_score += 0.3
             self.ai_signals += 1
@@ -164,7 +141,6 @@ class VoiceDetector:
             human_score += 0.3
             self.human_signals += 1
         
-        # Check MFCC std mean
         if mfcc_std_mean > 10:
             human_score += 0.3
             self.human_signals += 1
@@ -186,7 +162,6 @@ class VoiceDetector:
         ai_score = 0.0
         human_score = 0.0
         
-        # Check spectral flatness
         if flatness < self.THRESHOLDS['spectral_flatness_ai_min']:
             human_score += 0.35
             self.human_signals += 1
@@ -194,7 +169,6 @@ class VoiceDetector:
         else:
             ai_score += 0.25
         
-        # Check spectral centroid variation
         if centroid_std > self.THRESHOLDS['spectral_centroid_std_ai_max']:
             human_score += 0.35
             self.human_signals += 1
@@ -203,7 +177,6 @@ class VoiceDetector:
             ai_score += 0.3
             self.ai_signals += 1
         
-        # Check spectral contrast
         if contrast > 20:
             human_score += 0.3
             self.human_signals += 1
@@ -225,7 +198,6 @@ class VoiceDetector:
         ai_score = 0.0
         human_score = 0.0
         
-        # Check silence ratio (humans have natural pauses)
         if self.THRESHOLDS['silence_ratio_human_min'] <= silence_ratio <= self.THRESHOLDS['silence_ratio_human_max']:
             human_score += 0.5
             self.human_signals += 1
@@ -238,7 +210,6 @@ class VoiceDetector:
             ai_score += 0.3
             self.indicators.append("Unusual pause patterns detected")
         
-        # Check RMS coefficient of variation
         if rms_cv > 0.4:
             human_score += 0.3
             self.human_signals += 1
@@ -246,7 +217,6 @@ class VoiceDetector:
         else:
             ai_score += 0.25
         
-        # Check zero crossing rate variation
         if zcr_std > 0.02:
             human_score += 0.2
         else:
@@ -267,7 +237,6 @@ class VoiceDetector:
         ai_score = 0.0
         human_score = 0.0
         
-        # Check jitter (humans have natural micro-variations)
         if jitter > self.THRESHOLDS['jitter_ai_max']:
             human_score += 0.4
             self.human_signals += 1
@@ -277,7 +246,6 @@ class VoiceDetector:
             self.ai_signals += 1
             self.indicators.append("Missing natural voice micro-variations")
         
-        # Check shimmer
         if shimmer > self.THRESHOLDS['shimmer_ai_max']:
             human_score += 0.3
             self.human_signals += 1
@@ -286,7 +254,6 @@ class VoiceDetector:
             ai_score += 0.3
             self.ai_signals += 1
         
-        # Check harmonic ratio (AI often too clean)
         if harmonic_ratio > self.THRESHOLDS['harmonic_ratio_ai_min']:
             ai_score += 0.25
             self.indicators.append("Unusually clean audio signal")
@@ -321,13 +288,11 @@ class VoiceDetector:
         if total_signals == 0:
             return 0.0
         
-        # If most signals agree, boost confidence
         if self.ai_signals > self.human_signals:
             agreement_ratio = self.ai_signals / total_signals
         else:
             agreement_ratio = self.human_signals / total_signals
         
-        # Boost ranges from 0 to 0.25 based on agreement
         if agreement_ratio > 0.75:
             return 0.25
         elif agreement_ratio > 0.65:
@@ -365,7 +330,7 @@ class VoiceDetector:
             max_category = max(self.scores, key=self.scores.get)
             return explanations.get(max_category, "Synthetic speech patterns detected")
         
-        else:  # HUMAN
+        else:
             human_indicators = [
                 ind for ind in self.indicators 
                 if any(word in ind.lower() for word in [
